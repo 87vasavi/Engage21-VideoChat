@@ -1,0 +1,242 @@
+<html>
+  <head>
+    <title>Simple Video Chat</title>
+    <style>
+      #messages { list-style-type: none; margin: 0; padding: 0; }
+      #messages > li { padding: 0.5rem 1rem; }
+      #messages > li:nth-child(odd) { background: #efefef; }
+    </style>
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.4.1/css/bootstrap.min.css" integrity="sha384-Vkoo8x4CGsO3+Hhxv8T/Q5PaXtkKtu6ug5TOeNV6gBiFeWPGFN9MuhOf23Q9Ifjh" crossorigin="anonymous">
+    <meta charset="UTF-8)" />
+  </head>
+  <body style="background-color:rebeccapurple;">
+    <div id="dashboard" style="text-align: center; padding-top: 10%;" >
+      <form id="form" >
+          <label>
+            <div class="form-group row" >
+              <label style="font-weight: 600; font-size:20px; ">Create a new room</label><br>
+              <input type="text" placeholder="Room Name" class="form-control rounded-0" />
+            </div>
+            <div class="form-group row">
+              <input type="submit" value="Create" class="form-control rounded-0"/>
+            </div>
+          </label>
+ 
+      </form>
+      <div id="notform">
+        <label >
+          <div class="form-group row">
+            <label for="your-name" style="font-weight: 600; font-size:20px" >Your Name To Connect</label>
+            <input id="name" type="text" placeholder="name" class="form-control rounded-0"/>
+          </div>
+          <div class="form-group row">
+            <label style="font-weight: 600; font-size:20px">Type a room name to Connect</label>
+            <input id="connect-room" type="text" placeholder="Room Name" class="form-control rounded-0" />
+            <label style="font-weight: 500;"> don't have one ?<button type="button" onclick="createRoom()"  class="btn" style=" font-style: italic; color:seashell"> Create one</button></label>
+          </div>
+          <div class="form-group row">
+            <button id="connect" class="form-control rounded-0" style="font-style: italic;">Connect</button>
+          </div>
+          
+        </label>
+      </div>
+      <ul id="roomsList" style="visibility: hidden;"></ul>
+    </div>
+    <div style="display: none;  padding-left:50%;"  id="chatbar" >
+      <nav id="sidebarMenu" class="collapse d-lg-block sidebar collapse bg-white" > 
+        <div>
+          <div class="list-group list-group-flush mx-3 mt-4">
+            <ul id="messages"></ul>
+          </div> 
+          <form id="mform" class="form-horizontal">
+              <input id="input1" autocomplete="off" style="width: 90%; "  /><button  class="btn" type="submit"  >Send</button> 
+          </form> 
+       </div>
+      </nav>
+    </div>  
+    <div id="stream" style='display:none;'>
+      <video id="client" autoplay muted></video>
+      <video id="guest" autoplay muted></video>
+      <div>
+        <button id="hang-up">Hang up</button>
+        <button id="chat">chat</button>
+      </div>
+    </div>
+    
+  </body>
+  <script src="/socket.io/socket.io.js"></script>
+    <script>
+      // get the references for elements
+var form = document.querySelector("#form"),
+notform=document.querySelector("#notform"),
+dashboard = document.querySelector("#dashboard"),
+stream = document.querySelector("#stream"),
+roomsList = document.querySelector("#roomsList"),
+client = document.querySelector("#client"),
+guest = document.querySelector("#guest"),
+hangUp = document.querySelector("#hang-up"),
+messages=document.querySelector("#messages"),
+mform=document.querySelector("#mform"),
+input=document.querySelector("#input1")
+connectRoom = document.querySelector("#connect-room"),
+connect = document.querySelector("#connect"),
+chatbar=document.querySelector("#chatbar"),
+myname = document.getElementById("name"),
+chat=document.getElementById("chat");
+const iceServers = {
+iceServer: {
+  urls: "stun:stun.l.google.com:19302"
+}
+};
+
+form.style.display="none";
+const pc = new RTCPeerConnection(iceServers);
+const socket = io('http://localhost:8000/');
+
+var rooms = [];
+var inboundStream = null;
+var localeStream, currentRoom;
+var okchat=false;
+
+form.onsubmit = function (e) {
+e.preventDefault();
+form.style.display="none";
+notform.style.display="block";
+var val = e.target[0].value;
+console.log(val)
+socket.emit("room", val);
+};
+
+function createRoom(){
+  form.style.display="block";
+  notform.style.display="none";
+
+}
+mform.addEventListener( "submit",function(e){
+  e.preventDefault();
+  msg=input.value;
+  console.log(msg)
+  socket.emit("msgUser",{msg, me:myname.value}) 
+  input.value=''
+})
+
+chat.onclick=function(){
+ 
+    if(!okchat){
+      okchat=true;
+      chatbar.style.display="block";
+    } else{
+      okchat=false;
+      chatbar.style.display="none";
+    }
+
+}
+
+hangUp.onclick = function (e) {
+location.reload();
+};
+
+connect.onclick = function () {
+currentRoom = connectRoom.value;
+if (!rooms.includes(currentRoom)) {
+  alert("There is no room with a given name");
+  return;
+}
+// get user media
+navigator.mediaDevices
+  .getUserMedia({ video: true, audio: true })
+  .then(async stream => {
+    client.srcObject = stream||null;
+    try {
+      await client.play();
+      socket.emit("join", currentRoom);
+      localeStream = stream;
+    } catch (err) {
+      console.error(err);
+    }
+  });
+dashboard.style.display = "none";
+stream.style.display = "block";
+};
+
+socket.on("room", room => {
+rooms.push(room);
+var li = document.createElement("li");
+li.innerText = room;
+roomsList.append(li);
+});
+
+socket.on("msgUser",({msg,me})=>{
+  console.log(msg,me)
+  var item = document.createElement('li');
+  item.textContent =me+':'+msg;
+  messages.appendChild(item);
+  console.log(messages)
+  window.scrollTo(0, document.body.scrollHeight);
+})
+
+socket.on("join", room => {//creating offer
+if (currentRoom !== room) return;
+pc.ontrack = addRemoteMediaStream;
+pc.onicecandidate = generateIceCandidate;
+pc.addTrack(localeStream.getTracks()[0], localeStream);
+pc.addTrack(localeStream.getTracks()[1], localeStream);
+pc.createOffer().then(description => {
+  pc.setLocalDescription(description);
+  console.log("Setting local description:", description);
+  socket.emit("offer", description);
+});
+});
+
+socket.on("offer", offer => {//creating answer
+pc.ontrack = addRemoteMediaStream;
+pc.onicecandidate = generateIceCandidate;
+pc.setRemoteDescription(new RTCSessionDescription(offer));
+pc.addTrack(localeStream.getTracks()[0], localeStream);
+pc.addTrack(localeStream.getTracks()[1], localeStream);
+pc.createAnswer().then(description => {
+  pc.setLocalDescription(description);
+  console.log("Setting locale description", description);
+  socket.emit("answer", description);
+});
+});
+
+socket.on("answer", answer => {
+pc.setRemoteDescription(new RTCSessionDescription(answer));
+});
+
+socket.on("candidate", event => {
+var iceCandidate = new RTCIceCandidate({
+  sdpMLineIndex: event.label,
+  candidate: event.candidate
+});
+pc.addIceCandidate(iceCandidate);
+});
+
+function addRemoteMediaStream(event) {
+  console.log()
+if (event.streams && event.streams[0]) {
+  guest.srcObject = event.streams[0];
+} else {
+  if (!inboundStream) {
+    inboundStream = new MediaStream();
+    guest.srcObject = inboundStream;
+  }
+  inboundStream.addTrack(event.track);
+}
+}
+
+function generateIceCandidate(event) {
+if (event.candidate) {
+  var candidate = {
+    type: "candidate",
+    label: event.candidate.sdpMLineIndex,
+    id: event.candidate.sdpMid,
+    candidate: event.candidate.candidate
+  };
+  console.log("Sending a candidate: ", candidate);
+  socket.emit("candidate", candidate);
+}
+}
+    </script>
+</html>
