@@ -8,7 +8,7 @@
  - I have used Scrum methodology for making this app
  - I planned what I should make by the end of the progam and with the help of mentors I made my plan.
  ### Plan :
- - I first made a simple react app.
+ - I first made a simple app using express.
  - I made a message-chat using nodejs and sockets
  - Then I started learning webrtc and made peer offer - answer  connections
  - Completed the peerConnection by passing icecandidates.
